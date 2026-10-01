@@ -1,0 +1,378 @@
+polling:
+  interval_seconds: 3.0
+  timeout_seconds: 2.0
+  concurrency_limit: 5
+
+devices:
+  # Studio A - Main Stage Encoders
+  - id: "mw-cam-01"
+    name: "Studio A - Cam 1 (Main Wide)"
+    ip: "192.168.10.101"
+    port: 80
+    model: "Pro Convert HDMI Plus"
+    role: "Encoder"
+    location: "Studio A"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      color_format: "YUV422"
+      max_temperature_c: 65.0
+      ndi_name: "STUDIO-A-CAM1"
+
+  - id: "mw-cam-02"
+    name: "Studio A - Cam 2 (Close Up)"
+    ip: "192.168.10.102"
+    port: 80
+    model: "Pro Convert HDMI Plus"
+    role: "Encoder"
+    location: "Studio A"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      color_format: "YUV422"
+      max_temperature_c: 65.0
+      ndi_name: "STUDIO-A-CAM2"
+
+  - id: "mw-cam-03"
+    name: "Studio A - Cam 3 (Jib / Crane)"
+    ip: "192.168.10.103"
+    port: 80
+    model: "Pro Convert SDI Plus"
+    role: "Encoder"
+    location: "Studio A"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      color_format: "YUV422"
+      max_temperature_c: 65.0
+      ndi_name: "STUDIO-A-CAM3"
+
+  - id: "mw-cam-04"
+    name: "Studio A - Cam 4 (Presenter Desk)"
+    ip: "192.168.10.104"
+    port: 80
+    model: "Pro Convert HDMI Plus"
+    role: "Encoder"
+    location: "Studio A"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      color_format: "YUV422"
+      max_temperature_c: 65.0
+      ndi_name: "STUDIO-A-CAM4"
+
+  # Studio B - News & Interview Encoders
+  - id: "mw-cam-05"
+    name: "Studio B - News Desk A"
+    ip: "192.168.10.105"
+    port: 80
+    model: "Pro Convert HDMI Plus"
+    role: "Encoder"
+    location: "Studio B"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      color_format: "YUV422"
+      max_temperature_c: 65.0
+      ndi_name: "STUDIO-B-NEWS-A"
+
+  - id: "mw-cam-06"
+    name: "Studio B - News Desk B"
+    ip: "192.168.10.106"
+    port: 80
+    model: "Pro Convert HDMI Plus"
+    role: "Encoder"
+    location: "Studio B"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      color_format: "YUV422"
+      max_temperature_c: 65.0
+      ndi_name: "STUDIO-B-NEWS-B"
+
+  - id: "mw-cam-07"
+    name: "Studio B - Chroma Key Wall"
+    ip: "192.168.10.107"
+    port: 80
+    model: "Pro Convert SDI Plus"
+    role: "Encoder"
+    location: "Studio B"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      color_format: "YUV422"
+      max_temperature_c: 65.0
+      ndi_name: "STUDIO-B-CHROMA"
+
+  - id: "mw-cam-08"
+    name: "Studio B - Guest / Remote"
+    ip: "192.168.10.108"
+    port: 80
+    model: "Pro Convert HDMI Plus"
+    role: "Encoder"
+    location: "Studio B"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      color_format: "YUV422"
+      max_temperature_c: 65.0
+      ndi_name: "STUDIO-B-GUEST"
+
+  # Master Control Room (MCR) - Monitoring & Encoders
+  - id: "mw-mcr-01"
+    name: "MCR - PGM TX Line 1"
+    ip: "192.168.10.109"
+    port: 80
+    model: "Pro Convert SDI 4K Plus"
+    role: "Encoder"
+    location: "MCR"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 3840
+      height: 2160
+      frame_rate: 50.0
+      color_format: "YUV422"
+      max_temperature_c: 65.0
+      ndi_name: "MCR-PGM-4K-TX1"
+
+  - id: "mw-mcr-02"
+    name: "MCR - PGM Backup TX Line 2"
+    ip: "192.168.10.110"
+    port: 80
+    model: "Pro Convert SDI Plus"
+    role: "Encoder"
+    location: "MCR"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      color_format: "YUV422"
+      max_temperature_c: 65.0
+      ndi_name: "MCR-PGM-HD-TX2"
+
+  - id: "mw-mcr-03"
+    name: "MCR - Clean Feed TX"
+    ip: "192.168.10.111"
+    port: 80
+    model: "Pro Convert SDI Plus"
+    role: "Encoder"
+    location: "MCR"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      color_format: "YUV422"
+      max_temperature_c: 65.0
+      ndi_name: "MCR-CLEAN-TX"
+
+  - id: "mw-mcr-04"
+    name: "MCR - MultiViewer Return"
+    ip: "192.168.10.112"
+    port: 80
+    model: "Pro Convert NDI to HDMI"
+    role: "Decoder"
+    location: "MCR"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      max_temperature_c: 65.0
+
+  # OB Van / Outside Broadcast Units
+  - id: "mw-ob-01"
+    name: "OB Van - Feed 1 (Field Cam 1)"
+    ip: "192.168.10.113"
+    port: 80
+    model: "Pro Convert SDI Plus"
+    role: "Encoder"
+    location: "OB Van"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      color_format: "YUV422"
+      max_temperature_c: 65.0
+      ndi_name: "OBVAN-FEED1"
+
+  - id: "mw-ob-02"
+    name: "OB Van - Feed 2 (Field Cam 2)"
+    ip: "192.168.10.114"
+    port: 80
+    model: "Pro Convert SDI Plus"
+    role: "Encoder"
+    location: "OB Van"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      color_format: "YUV422"
+      max_temperature_c: 65.0
+      ndi_name: "OBVAN-FEED2"
+
+  - id: "mw-ob-03"
+    name: "OB Van - Replay Output"
+    ip: "192.168.10.115"
+    port: 80
+    model: "Pro Convert SDI Plus"
+    role: "Encoder"
+    location: "OB Van"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      color_format: "YUV422"
+      max_temperature_c: 65.0
+      ndi_name: "OBVAN-REPLAY"
+
+  - id: "mw-ob-04"
+    name: "OB Van - Intercom / Return"
+    ip: "192.168.10.116"
+    port: 80
+    model: "Pro Convert NDI to SDI"
+    role: "Decoder"
+    location: "OB Van"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      max_temperature_c: 65.0
+
+  # Decoders & Display Feeds (Stage / LED Wall / Studio Monitors)
+  - id: "mw-dec-01"
+    name: "Studio A - Main LED Wall Decoder"
+    ip: "192.168.10.117"
+    port: 80
+    model: "Pro Convert NDI to HDMI 4K"
+    role: "Decoder"
+    location: "Studio A"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 3840
+      height: 2160
+      frame_rate: 50.0
+      max_temperature_c: 65.0
+
+  - id: "mw-dec-02"
+    name: "Studio A - Confidence Monitor Desk"
+    ip: "192.168.10.118"
+    port: 80
+    model: "Pro Convert NDI to HDMI"
+    role: "Decoder"
+    location: "Studio A"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      max_temperature_c: 65.0
+
+  - id: "mw-dec-03"
+    name: "Studio B - News Backdrop Display"
+    ip: "192.168.10.119"
+    port: 80
+    model: "Pro Convert NDI to HDMI"
+    role: "Decoder"
+    location: "Studio B"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 1920
+      height: 1080
+      frame_rate: 50.0
+      max_temperature_c: 65.0
+
+  - id: "mw-dec-04"
+    name: "Production Gallery - Director Multiview"
+    ip: "192.168.10.120"
+    port: 80
+    model: "Pro Convert NDI to HDMI 4K"
+    role: "Decoder"
+    location: "Control Room"
+    auth:
+      username: "admin"
+      password: "password123"
+    expected:
+      signal_locked: true
+      width: 3840
+      height: 2160
+      frame_rate: 50.0
+      max_temperature_c: 65.0

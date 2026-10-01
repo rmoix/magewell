@@ -1,0 +1,101 @@
+/* Custom styles and broadcast indicators for Magewell Mini-NMS */
+
+:root {
+  --bg-dark: #090d16;
+  --card-bg: #111827;
+  --card-border: #1f2937;
+}
+
+body {
+  background-color: var(--bg-dark);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #f3f4f6;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Status Cards & Borders */
+.status-card {
+  transition: all 0.25s ease-in-out;
+}
+.status-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+.status-ok {
+  border-color: rgba(34, 197, 94, 0.4);
+}
+.status-ok:hover {
+  border-color: rgba(34, 197, 94, 0.8);
+}
+
+.status-warning {
+  border-color: rgba(245, 158, 11, 0.6);
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.05) 0%, rgba(17, 24, 39, 1) 100%);
+}
+.status-warning:hover {
+  border-color: rgba(245, 158, 11, 1);
+}
+
+.status-no_signal {
+  border-color: rgba(239, 68, 68, 0.6);
+  background: linear-gradient(180deg, rgba(239, 68, 68, 0.08) 0%, rgba(17, 24, 39, 1) 100%);
+}
+.status-no_signal:hover {
+  border-color: rgba(239, 68, 68, 1);
+}
+
+.status-offline {
+  border-color: rgba(75, 85, 99, 0.4);
+  opacity: 0.85;
+}
+.status-offline:hover {
+  opacity: 1;
+  border-color: rgba(107, 114, 128, 0.8);
+}
+
+/* Live Pulse Animation */
+@keyframes pulse-ring {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 0.3; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.live-pulse {
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Drift tag warning glow */
+.drift-badge {
+  animation: subtle-glow 2.5s ease-in-out infinite alternate;
+}
+
+@keyframes subtle-glow {
+  0% { box-shadow: 0 0 5px rgba(245, 158, 11, 0.2); }
+  100% { box-shadow: 0 0 12px rgba(245, 158, 11, 0.6); }
+}
+
+/* Flash on update */
+.card-flash {
+  animation: flash-highlight 0.8s ease-out;
+}
+
+@keyframes flash-highlight {
+  0% { background-color: rgba(59, 130, 246, 0.2); }
+  100% { background-color: var(--card-bg); }
+}
