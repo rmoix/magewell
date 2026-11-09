@@ -17,6 +17,11 @@
       </div>
     </div>
 
+    <div class="seg pages" role="tablist" aria-label="Pantalla">
+      <button class="seg-btn active" data-page="monitor" role="tab">Monitor</button>
+      <button class="seg-btn" data-page="routing" role="tab">Enrutament</button>
+    </div>
+
     <nav class="counters" aria-label="Resum">
       <button class="counter" data-status="ALL"><span class="lbl">Total</span><b id="c-total">0</b></button>
       <button class="counter ok" data-status="OK"><span class="lbl">OK</span><b id="c-ok">0</b></button>
@@ -34,6 +39,7 @@
     </div>
   </header>
 
+  <div id="page-monitor" class="page">
   <div class="toolbar">
     <div class="seg" role="group" aria-label="Rol">
       <button class="seg-btn active" data-role="ALL">Tots</button>
@@ -57,6 +63,22 @@
     <label class="check" title="So quan un equip passa a error"><input id="f-sound" type="checkbox"> So</label>
   </div>
 
+  </div>
+
+  <div id="page-routing" class="page hidden">
+    <div class="toolbar">
+      <button id="btn-lock" class="btn lock" aria-pressed="false">Bloquejat · clica per editar</button>
+      <input id="r-search" type="search" placeholder="Filtra fonts o receptors…" aria-label="Filtra la matriu">
+      <label class="check"><input id="r-offline" type="checkbox" checked> Fonts no visibles</label>
+      <span class="spacer"></span>
+      <span id="r-info" class="muted small"></span>
+      <button id="btn-refresh-sources" class="btn">Refrescar fonts</button>
+    </div>
+    <div id="r-banner" class="editbanner hidden">
+      Mode edició: cada clic a la matriu canvia la font del decoder <b>immediatament</b>. Es torna a bloquejar sol després de 2 minuts sense canvis.
+    </div>
+  </div>
+
   <div id="scanbar" class="scanbar hidden">
     <div class="scan-text" id="scan-text"></div>
     <div class="progress"><div id="scan-progress"></div></div>
@@ -66,8 +88,21 @@
   <div id="stale" class="stale hidden">Fa estona que no arriben dades del servidor. Comprova que el programa continua obert.</div>
 
   <main>
-    <div id="devices" class="grid"></div>
-    <div id="empty" class="empty hidden"></div>
+    <div id="main-monitor">
+      <div id="devices" class="grid"></div>
+      <div id="empty" class="empty hidden"></div>
+    </div>
+    <div id="main-routing" class="hidden">
+      <div class="legend small">
+        <span><i class="lg ok"></i> Connectat amb vídeo</span>
+        <span><i class="lg bad"></i> Connectat sense vídeo</span>
+        <span><i class="lg pending"></i> Canviant…</span>
+        <span><i class="dot st-OK"></i><i class="dot st-NO_SIGNAL"></i> Estat de l'encoder Magewell que emet la font</span>
+        <span class="muted">Columnes (Tx): fonts NDI · Files (Rx): decoders</span>
+      </div>
+      <div class="matrix-wrap"><table id="matrix" class="matrix"></table></div>
+      <div id="r-empty" class="empty hidden"></div>
+    </div>
   </main>
 
   <aside id="drawer" class="drawer" aria-hidden="true">

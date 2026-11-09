@@ -44,7 +44,7 @@ class Poller:
         self.transport_factory = transport_factory
         self._sessions: Dict[str, MagewellSession] = {}
 
-    def _session(self, t: Target, timeout: float) -> MagewellSession:
+    def session(self, t: Target, timeout: float) -> MagewellSession:
         s = self._sessions.get(t.id)
         creds = self.registry.credentials_for(t)
         if s is None or s.credentials != creds or s.timeout != timeout:
@@ -78,7 +78,7 @@ class Poller:
         base.location = t.location
         base.source = t.source
         base.last_checked = now_iso()
-        session = self._session(t, config.polling.timeout_seconds)
+        session = self.session(t, config.polling.timeout_seconds)
         raw: Dict[str, dict] = {}
 
         try:

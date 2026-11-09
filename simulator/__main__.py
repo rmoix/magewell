@@ -19,7 +19,18 @@ from simulator.device import SimDevice, make_app
 log = logging.getLogger("simulator")
 
 
+EXTRA_SOURCES = ["REGIA (PGM)", "REGIA (PVW)", "REGIA (MULTIVIEW)", "PC-PRESENTACIONS (PowerPoint)"]
+
+
 def fleet() -> list[SimDevice]:
+    devs = _devices()
+    for d in devs:
+        d.network = devs  # xarxa NDI compartida
+        d.extra_sources = list(EXTRA_SOURCES)
+    return devs
+
+
+def _devices() -> list[SimDevice]:
     return [
         SimDevice("encoder", "HDMI Plus", "B312220101001", 1, "SALA-CAM1"),
         SimDevice("encoder", "HDMI Plus", "B312220101002", 2, "SALA-CAM2"),

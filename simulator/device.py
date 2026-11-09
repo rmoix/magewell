@@ -11,7 +11,7 @@ import hashlib
 import random
 import secrets
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -48,9 +48,44 @@ class SimDevice:
     drop_frames: int = 0
     hang: bool = False  # simula equip penjat (no respon)
     sessions: Dict[str, bool] = field(default_factory=dict)
+    # Xarxa NDI simulada: llista compartida amb tots els equips + fonts que no són Magewell (PCs, mescladors...)
+    network: Optional[list] = field(default=None, repr=False, compare=False)
+    extra_sources: List[str] = field(default_factory=list, repr=False, compare=False)
+
+    # ----------------------------------------------------------------- xarxa NDI
+    def ndi_sources(self) -> List[dict]:
+        out = [{"ndi-name": d.ndi_name, "ip-addr": f"127.0.0.1:{5961 + i}"}
+               for i, d in enumerate(self.network or []) if d.role == "encoder" and d.ndi_enabled and d.ndi_name]
+        out += [{"ndi-name": n, "ip-addr": f"10.10.0.{20 + i}:5961"} for i, n in enumerate(self.extra_sources)]
+        return out
+
+    def _linked_encoder(self) -> Optional["SimDevice"]:
+        for d in self.network or []:
+            if d.role == "encoder" and d.ndi_name and d.ndi_name.casefold() == (self.source or "").casefold():
+                return d
+        return None
+
+    def rx_state(self) -> tuple[bool, str]:
+        """Decoder: (rep vídeo?, format). Si la font és un encoder simulat, hereta el seu estat."""
+        enc = self._linked_encoder()
+        if enc is not None:
+            return enc.signal and enc.ndi_enabled, enc.fmt
+        known = [s["ndi-name"].casefold() for s in self.ndi_sources()]
+        return self.signal and (self.source or "").casefold() in known, self.fmt
 
     # ----------------------------------------------------------------- respostes
     def summary(self) -> dict:
+        if self.role == "decoder" and self.network is not None:
+            rx_signal, rx_fmt = self.rx_state()
+            saved = (self.signal, self.fmt)
+            self.signal, self.fmt = rx_signal, rx_fmt
+            try:
+                return self._summary()
+            finally:
+                self.signal, self.fmt = saved
+        return self._summary()
+
+    def _summary(self) -> dict:
         w, h, scan, rate = FORMATS[self.fmt]
         device = {
             "name": "Pro Convert",
@@ -147,6 +182,17 @@ class SimDevice:
             if self.role != "decoder":
                 return {"status": 9}, None
             return {"status": 0, "name": self.source, "ndi-name": True}, None
+        if method == "get-ndi-sources":
+            return {"status": 0, "sources": self.ndi_sources()}, None
+        if method == "set-channel":
+            if self.role != "decoder":
+                return {"status": 9}, None
+            name = params.get("name", "")
+            if not name or params.get("ndi-name", "").lower() != "true":
+                return {"status": 7}, None  # INVALID_ARG
+            self.source = name
+            self.signal = True
+            return {"status": 0}, None
         if method == "get-ndi-config":
             return {"status": 0, "enable": self.ndi_enabled, "source-name": self.ndi_name, "group-name": "public"}, None
         if method.startswith("get-") or method.startswith("list-"):

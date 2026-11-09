@@ -58,6 +58,10 @@ class StateStore:
             msg += f" — {status.issues[0]}"
         return self._alert(status, SEVERITY.get(status.status, "info"), msg)
 
+    def log_event(self, status: DeviceStatus, severity: str, msg: str) -> AlertEvent:
+        """Registra un esdeveniment manual (p. ex. un canvi d'enrutament) a l'historial i a events.log."""
+        return self._alert(status, severity, msg)
+
     def _alert(self, status: DeviceStatus, severity: str, msg: str) -> AlertEvent:
         a = AlertEvent(
             timestamp=now_iso(), device_id=status.id, device_name=status.name, ip=status.ip,

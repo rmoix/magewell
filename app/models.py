@@ -70,6 +70,13 @@ class DiscoveryConfig(BaseModel):
     forget_after_days: float = 0  # 0 = no oblidar mai equips descoberts
 
 
+class RoutingConfig(BaseModel):
+    enabled: bool = True  # false = la matriu només es pot consultar, no es pot enrutar
+    refresh_seconds: float = Field(15.0, ge=3.0)  # cada quant es demana la llista de fonts NDI
+    source_ttl_seconds: float = Field(90.0, ge=10.0)  # una font no vista en aquest temps es marca com a no visible
+    forget_after_seconds: float = 900.0  # i després d'aquest temps desapareix de la matriu
+
+
 class DefaultsConfig(BaseModel):
     expected: ExpectedState = Field(default_factory=lambda: ExpectedState(max_temperature_c=80.0))
 
@@ -78,6 +85,7 @@ class AppConfig(BaseModel):
     server: ServerConfig = Field(default_factory=ServerConfig)
     polling: PollingConfig = Field(default_factory=PollingConfig)
     discovery: DiscoveryConfig = Field(default_factory=DiscoveryConfig)
+    routing: RoutingConfig = Field(default_factory=RoutingConfig)
     credentials: List[Credential] = Field(default_factory=lambda: [Credential()])
     defaults: DefaultsConfig = Field(default_factory=DefaultsConfig)
     devices: List[ManualDevice] = Field(default_factory=list)
@@ -185,6 +193,19 @@ class AlertEvent(BaseModel):
     status: HealthStatus
     message: str
     issues: List[str] = Field(default_factory=list)
+
+
+class NdiSource(BaseModel):
+    """Una font NDI vista a la xarxa (columna Tx de la matriu)."""
+
+    name: str  # nom NDI complet, p. ex. "REGIA (PGM)"
+    machine: str  # part abans del parèntesi ("REGIA")
+    stream: str  # part dins del parèntesi ("PGM")
+    ip_addr: Optional[str] = None  # "192.168.1.50:5961"
+    device_id: Optional[str] = None  # encoder Magewell que l'emet, si l'hem identificat
+    seen_by: List[str] = Field(default_factory=list)  # decoders que la veuen
+    last_seen: Optional[str] = None
+    online: bool = True
 
 
 class ScanHost(BaseModel):

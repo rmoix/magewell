@@ -51,6 +51,24 @@ tots els Magewell que troba. Un equip descobert **no desapareix** si s'apaga: su
 - Clica els comptadors de dalt per filtrar per estat.
 - Casella **So**: emet un avís sonor quan un equip passa a error.
 
+### Enrutament NDI (pestanya «Enrutament»)
+
+Matriu a l'estil del Dante Controller per triar quina font NDI mostra cada decoder.
+
+- **Columnes (Tx)**: totes les fonts NDI que veuen els decoders a la xarxa, també les que no són Magewell
+  (vMix, OBS, PCs…). Es mostren agrupades per màquina: el nom NDI té la forma `MÀQUINA (FLUX)`.
+  Si la font és un encoder Magewell, el punt de color mostra el seu estat (verd = té senyal, vermell = sense senyal).
+- **Files (Rx)**: els decoders Magewell, amb la font que reben ara i el format.
+- **Cel·les**: verd = connectat i rebent vídeo · vermell = connectat però sense vídeo · blau parpellejant = canviant.
+- La matriu **arrenca bloquejada** perquè un clic accidental no canviï el que surt per una pantalla en ple acte.
+  Prem **Bloquejat · clica per editar**; a partir d'aquí cada clic canvia la font **immediatament**.
+  Es torna a bloquejar sola després de 2 minuts sense canvis.
+- Cada canvi queda registrat a **Alertes** i a `data\events.log`.
+- `routing.enabled: false` a `config.yaml` deixa la matriu en mode només lectura.
+
+Com funciona: a NDI no hi ha un router central; cada receptor tria la font. El programa demana la llista de fonts
+als decoders (`get-ndi-sources`, cada 15 s) i, en clicar, envia `set-channel` al decoder.
+
 ### Ordres de consola
 
 Obre `cmd` a la carpeta del programa:
@@ -115,13 +133,18 @@ no amb equips reals. Per això, el primer dia:
    - Desendolla l'HDMI/SDI d'un encoder: ha de passar a SENSE SENYAL en 3-6 segons.
    - Canvia la font d'un decoder o atura l'emissor: el decoder ha de passar a SENSE SENYAL.
    - Clica una targeta i revisa que els valors (resolució, temperatura, nom NDI…) coincideixen amb la web de l'equip.
-5. Porta el `.zip` de captures i `data\nms.log` per revisar-ho.
+5. **Enrutament**: a la pestanya *Enrutament*, comprova que apareixen les fonts NDI esperades. Desbloqueja la matriu i
+   canvia la font d'un decoder que **no estigui en ús**. Si l'equip ho rebutja, el missatge d'error en mostra el codi.
+   Apunta'l: pot voler dir que l'equip només accepta fonts predefinides.
+6. Porta el `.zip` de captures i `data\nms.log` per revisar-ho.
 
 ### Coses pendents de confirmar amb equips reals
 
 - Format exacte de `input-state` i de `get-signal-info` quan no hi ha senyal.
 - Als decoders: si `ndi.connected` + `video-width` reflecteixen bé que s'està rebent vídeo, i què retorna `get-channel`.
 - Quant dura la sessió (el programa torna a fer login automàticament si caduca).
+- Si `set-channel` accepta directament qualsevol font NDI descoberta o només les predefinides (`list-channels`),
+  i si `get-ndi-sources` retorna el nom NDI complet exactament igual que `get-channel`.
 - Si teniu models més nous (*Pro Convert IP to HDMI*, *Ultra Encode*…), usen una API diferent (`/api/…`) i ara no se supervisen.
 
 ---
@@ -155,6 +178,7 @@ app/
   poller.py        sondeig d'un equip
   health.py        càlcul d'estat (OK / AVÍS / SENSE SENYAL…)
   service.py       orquestració (bucles, escaneig, esdeveniments)
+  routing.py       enrutament NDI: fonts (Tx) i canvi de font dels decoders (Rx)
   routes/api.py    API REST + Server-Sent Events
 static/, templates/  dashboard (sense dependències externes; funciona sense internet)
 simulator/       equips Magewell simulats
@@ -170,6 +194,9 @@ packaging/       PyInstaller i scripts de Windows
 | DELETE | `/api/devices/{id}` | Oblidar un equip descobert |
 | GET | `/api/summary`, `/api/alerts` | Resum i alertes |
 | POST | `/api/poll-now`, `/api/discovery/scan`, `/api/reload-config`, `/api/alerts/clear` | Accions |
+| GET | `/api/routing` | Fonts NDI (Tx) |
+| POST | `/api/routing/refresh` | Torna a demanar les fonts als decoders |
+| POST | `/api/routing/route` | `{"rx": "<id decoder>", "tx": "<nom NDI>"}` |
 | GET | `/api/events` | Server-Sent Events per al dashboard |
 
 Documentació de l'API de Magewell:

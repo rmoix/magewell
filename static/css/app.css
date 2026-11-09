@@ -196,3 +196,69 @@ pre.raw { background: var(--bg); border: 1px solid var(--line); border-radius: 8
 }
 /* Pantalla gran de sala: més columnes */
 @media (min-width: 2200px) { .grid { grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); } body { font-size: 15px; } }
+
+/* ---------- matriu d'enrutament NDI ---------- */
+.pages .seg-btn { padding: 6px 12px; font-weight: 600; }
+.btn.lock { min-width: 210px; }
+.btn.lock.unlocked { background: var(--warn); border-color: var(--warn); color: #1a1205; font-weight: 700; }
+.editbanner { padding: 7px 16px; background: #3a2a07; color: #fde68a; border-bottom: 1px solid #78510f; font-size: 13px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; margin-bottom: 10px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.lg { display: inline-block; width: 14px; height: 14px; border-radius: 3px; }
+.lg.ok { background: var(--ok); }
+.lg.bad { background: var(--bad); }
+.lg.pending { background: var(--accent); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--st, var(--off)); flex: none; }
+
+.matrix-wrap {
+  overflow: auto; max-height: calc(100vh - 230px); border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel);
+}
+table.matrix { border-collapse: separate; border-spacing: 0; font-size: 12px; }
+.matrix th, .matrix td { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.matrix thead th { position: sticky; background: var(--panel-2); z-index: 2; }
+.matrix thead tr.groups th { top: 0; height: 28px; padding: 0 6px; text-align: left; font-weight: 700; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 1px; color: var(--text); border-bottom-color: #33435e; }
+.matrix thead tr.cols th { top: 28px; height: 190px; vertical-align: bottom; padding: 6px 0; width: 32px; min-width: 32px; max-width: 32px; }
+.matrix th.corner { left: 0; top: 0; z-index: 4; min-width: 260px; max-width: 260px; text-align: left; vertical-align: bottom;
+  padding: 8px 10px; color: var(--muted); font-weight: 500; }
+.corner .axis { display: block; font: 600 11px var(--mono); }
+.corner .axis.tx { text-align: right; margin-bottom: 110px; }
+.vlabel { display: inline-flex; align-items: center; gap: 5px; writing-mode: vertical-rl; transform: rotate(180deg);
+  white-space: nowrap; max-height: 178px; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.colhead.offline .vlabel { color: var(--off); text-decoration: line-through; }
+.colhead.missing .vlabel { color: var(--bad); }
+.colhead .dot { transform: rotate(180deg); }
+
+.matrix tbody th.rowhead {
+  position: sticky; left: 0; z-index: 1; background: var(--panel-2); text-align: left; padding: 5px 10px;
+  min-width: 260px; max-width: 260px; font-weight: 500;
+}
+.rowhead .rname { display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.rowhead .rsub { color: var(--muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-left: 14px; }
+.matrix tbody tr.offline th.rowhead { opacity: .55; }
+
+.matrix td.cell { width: 32px; height: 32px; min-width: 32px; padding: 0; text-align: center; position: relative; cursor: pointer; }
+.matrix td.cell::after {
+  content: ""; position: absolute; inset: 7px; border-radius: 4px;
+}
+.matrix td.cell.ok::after { background: var(--ok); }
+.matrix td.cell.bad::after { background: var(--bad); }
+.matrix td.cell.old::after { border: 2px dashed var(--off); }
+.matrix td.cell.pending::after { background: var(--accent); animation: blink .7s ease-in-out infinite alternate; }
+.matrix td.cell.err::after { border: 2px solid var(--bad); background: rgba(239,68,68,.15); }
+@keyframes blink { from { opacity: 1; } to { opacity: .35; } }
+.matrix td.cell.ok::before, .matrix td.cell.bad::before {
+  content: "✓"; position: relative; z-index: 1; color: #04130a; font-weight: 800; font-size: 13px;
+}
+.matrix td.cell.bad::before { content: "!"; color: #fff; }
+
+/* creuer al passar per sobre (fila i columna) */
+.matrix tbody tr:hover td, .matrix tbody tr:hover th.rowhead, .matrix .hl { background: rgba(59,130,246,.10); }
+.matrix tbody tr:hover th.rowhead { background: #1c2a44; }
+.matrix thead th.hl { background: #1c2a44; color: #fff; }
+.matrix.unlocked td.cell:hover::after { box-shadow: 0 0 0 2px var(--warn); }
+.matrix.locked td.cell { cursor: not-allowed; }
+.matrix tr.offline td.cell { cursor: not-allowed; background: repeating-linear-gradient(45deg, transparent 0 4px, rgba(100,116,139,.08) 4px 8px); }
+.matrix.shake { animation: shake .3s; }
+@keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }

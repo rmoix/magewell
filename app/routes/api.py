@@ -8,6 +8,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from app.config import ConfigError
+from app.routing import RouteError, same_source
 from app.service import Monitor
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -87,6 +88,32 @@ async def start_scan(request: Request, body: Optional[ScanRequest] = None):
 @router.get("/discovery")
 async def scan_report(request: Request):
     return monitor(request).scan_report.model_dump()
+
+
+@router.get("/routing")
+async def routing_state(request: Request):
+    """Fonts NDI (Tx). Els receptors (Rx) són els equips amb role=Decoder de /api/devices."""
+    return monitor(request).router.snapshot()
+
+
+@router.post("/routing/refresh")
+async def routing_refresh(request: Request):
+    await monitor(request).router.refresh()
+    return monitor(request).router.snapshot()
+
+
+class RouteRequest(BaseModel):
+    rx: str  # id del decoder
+    tx: str  # nom NDI complet de la font
+
+
+@router.post("/routing/route")
+async def routing_route(body: RouteRequest, request: Request):
+    try:
+        status = await monitor(request).router.route(body.rx, body.tx)
+    except RouteError as e:
+        raise HTTPException(409, str(e))
+    return {"status": "ok", "device": status.model_dump(), "confirmed": same_source(status.ndi.name, body.tx)}
 
 
 @router.post("/reload-config")

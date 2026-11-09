@@ -53,6 +53,7 @@ READ_ONLY_METHODS = [
     "get-tally",
     "get-channel",
     "list-channels",
+    "get-ndi-sources",
     "get-eth-status",
     "get-auto-reboot",
     "get-update-state",

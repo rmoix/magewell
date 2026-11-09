@@ -12,6 +12,12 @@ const S = {
   f: { status: "ALL", role: "ALL", location: "ALL", q: "", problems: false, sort: "location", view: "grid", sound: false },
   openDevice: null,
   drawerMode: null,
+  page: "monitor",
+  routing: { sources: [], last_refresh: null, enabled: true },
+  unlocked: false, // mai es desa: sempre arrenca bloquejat
+  pending: new Map(), // rx id -> nom de la font que s'està enrutant
+  routeErr: null, // { rx, tx, until }
+  r: { q: "", showOffline: true },
 };
 
 const $ = (s) => document.querySelector(s);
@@ -26,12 +32,14 @@ function loadPrefs() {
   try {
     const p = JSON.parse(localStorage.getItem("nms-prefs") || "{}");
     for (const k of ["role", "location", "problems", "sort", "view", "sound"]) if (k in p) S.f[k] = p[k];
+    if (p.page === "routing" || p.page === "monitor") S.page = p.page;
+    if (location.hash === "#enrutament") S.page = "routing";
   } catch (_) { /* sense emmagatzematge: valors per defecte */ }
 }
 function savePrefs() {
   try {
     const { role, location, problems, sort, view, sound } = S.f;
-    localStorage.setItem("nms-prefs", JSON.stringify({ role, location, problems, sort, view, sound }));
+    localStorage.setItem("nms-prefs", JSON.stringify({ role, location, problems, sort, view, sound, page: S.page }));
   } catch (_) {}
 }
 
@@ -54,6 +62,7 @@ function handle(type, d) {
       S.alerts = d.alerts || [];
       S.scan = d.scan;
       S.interval = d.polling_interval || 3;
+      if (d.routing) S.routing = d.routing;
       // fallthrough
     case "cycle":
     case "devices": {
@@ -87,6 +96,10 @@ function handle(type, d) {
       renderScan();
       if (S.drawerMode === "scan") renderScanDrawer();
       break;
+    case "sources":
+      S.routing = d;
+      if (S.page === "routing") renderMatrix();
+      break;
   }
 }
 
@@ -98,7 +111,7 @@ function setLive(on) {
 function render() {
   renderCounters();
   renderLocations();
-  renderDevices();
+  if (S.page === "routing") renderMatrix(); else renderDevices();
   renderAlertsBadge();
   renderScan();
   const s = S.summary;
@@ -260,6 +273,185 @@ function rowHtml(d) {
     <td class="mono ${tempClass(d.temperature_c)}">${d.temperature_c != null ? d.temperature_c.toFixed(0) + "°" : "—"}</td>
     <td class="small">${d.status === "OK" ? "" : esc((d.issues || []).join(" · "))}</td>
   </tr>`;
+}
+
+/* ------------------------------------------------------------------ pàgines */
+function setPage(page) {
+  S.page = page;
+  $$("[data-page]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.page === page);
+    b.setAttribute("aria-selected", b.dataset.page === page);
+  });
+  $("#page-monitor").classList.toggle("hidden", page !== "monitor");
+  $("#main-monitor").classList.toggle("hidden", page !== "monitor");
+  $("#page-routing").classList.toggle("hidden", page !== "routing");
+  $("#main-routing").classList.toggle("hidden", page !== "routing");
+  history.replaceState(null, "", page === "routing" ? "#enrutament" : location.pathname);
+  savePrefs();
+  render();
+}
+
+/* ------------------------------------------------------------------ matriu d'enrutament */
+const sameSrc = (a, b) => !!a && !!b && a.trim().toLowerCase() === b.trim().toLowerCase();
+let lockTimer;
+
+function setUnlocked(on) {
+  if (on && S.routing.enabled === false) { toast("L'enrutament està desactivat a config.yaml (routing.enabled)", true); return; }
+  S.unlocked = on;
+  const b = $("#btn-lock");
+  b.classList.toggle("unlocked", on);
+  b.setAttribute("aria-pressed", on);
+  b.textContent = on ? "Edició activa · clica per bloquejar" : "Bloquejat · clica per editar";
+  $("#r-banner").classList.toggle("hidden", !on);
+  touchLock();
+  renderMatrix();
+}
+function touchLock() {
+  clearTimeout(lockTimer);
+  if (S.unlocked) lockTimer = setTimeout(() => { setUnlocked(false); toast("Matriu bloquejada automàticament"); }, 120000);
+}
+
+function matrixData() {
+  const q = S.r.q.toLowerCase();
+  const decoders = [...S.devices.values()].filter((d) => d.role === "Decoder");
+  let rows = decoders.filter((d) => !q || [d.name, d.ip, d.location, d.ndi?.name].join(" ").toLowerCase().includes(q));
+  if (!rows.length) rows = decoders; // el filtre no coincideix amb cap receptor: es filtren només les fonts
+
+  let cols = (S.routing.sources || []).map((s) => ({ ...s }));
+  // Fonts que algun decoder té assignades però que ja no es veuen a la xarxa
+  for (const d of decoders) {
+    const cur = d.ndi?.name;
+    if (cur && !cols.some((c) => sameSrc(c.name, cur))) {
+      const m = cur.match(/^(.*?)\s*\((.*)\)\s*$/);
+      cols.push({ name: cur, machine: m ? m[1] : cur, stream: m ? m[2] : "", online: false, missing: true });
+    }
+  }
+  if (!S.r.showOffline) cols = cols.filter((c) => c.online || decoders.some((d) => sameSrc(d.ndi?.name, c.name)));
+  const colsQ = cols.filter((c) => !q || c.name.toLowerCase().includes(q));
+  if (colsQ.length) cols = colsQ;
+  cols.sort((a, b) => a.machine.localeCompare(b.machine, "ca") || a.stream.localeCompare(b.stream, "ca"));
+  rows.sort((a, b) => (!a.location - !b.location) || (a.location || "").localeCompare(b.location || "", "ca") || a.name.localeCompare(b.name, "ca"));
+  return { rows, cols };
+}
+
+function cellState(d, c) {
+  const pend = S.pending.get(d.id);
+  const routed = sameSrc(d.ndi?.name, c.name);
+  if (S.routeErr && S.routeErr.rx === d.id && sameSrc(S.routeErr.tx, c.name) && Date.now() < S.routeErr.until) return "err";
+  if (pend) return sameSrc(pend, c.name) ? "pending" : routed ? "old" : "";
+  if (!routed) return "";
+  return d.is_online && d.signal?.locked ? "ok" : "bad";
+}
+
+function renderMatrix() {
+  const table = $("#matrix");
+  const empty = $("#r-empty");
+  const { rows, cols } = matrixData();
+  const lr = S.routing.last_refresh ? new Date(S.routing.last_refresh).toLocaleTimeString() : "—";
+  $("#r-info").textContent = `${cols.length} fonts · ${rows.length} decoders · fonts actualitzades ${lr}`;
+
+  if (!rows.length || !cols.length) {
+    table.innerHTML = "";
+    empty.classList.remove("hidden");
+    empty.innerHTML = !rows.length
+      ? `<h2>No hi ha cap decoder</h2><p>Els receptors (Rx) són els decoders Magewell (Pro Convert NDI to HDMI/SDI). Quan se'n detecti algun, apareixerà aquí.</p>`
+      : `<h2>Encara no s'ha trobat cap font NDI</h2><p>La llista de fonts la proporcionen els decoders. Prem <b>Refrescar fonts</b>.</p>`;
+    return;
+  }
+  empty.classList.add("hidden");
+  table.className = "matrix " + (S.unlocked ? "unlocked" : "locked");
+
+  // Agrupació per màquina (equivalent al "dispositiu" de Dante; el flux és el "canal")
+  const groups = [];
+  for (const c of cols) {
+    const g = groups[groups.length - 1];
+    if (g && g.machine === c.machine) g.n++; else groups.push({ machine: c.machine, n: 1 });
+  }
+  const encStatus = (c) => (c.device_id && S.devices.get(c.device_id)) ? S.devices.get(c.device_id).status : null;
+
+  let h = `<thead><tr class="groups"><th class="corner" rowspan="2"><span class="axis tx">Tx · fonts NDI →</span><span class="axis">Rx · decoders ↓</span></th>`;
+  // Una màquina amb una sola font: la columna ja mostra el nom complet, la capçalera de grup queda buida.
+  h += groups.map((g) => `<th colspan="${g.n}" title="${esc(g.machine)}">${g.n > 1 ? esc(g.machine) : ""}</th>`).join("");
+  h += `</tr><tr class="cols">`;
+  const groupSize = Object.fromEntries(groups.map((g) => [g.machine, g.n]));
+  h += cols.map((c, i) => {
+    const st = encStatus(c);
+    const label = groupSize[c.machine] > 1 ? (c.stream || c.machine) : c.name;
+    const cls = ["colhead", c.missing ? "missing" : !c.online ? "offline" : ""].join(" ");
+    const tip = [c.name, c.ip_addr, c.missing ? "no es veu a la xarxa" : !c.online ? "fa estona que no es veu" : "",
+      st ? `encoder Magewell: ${STATUS_LABEL[st]}` : ""].filter(Boolean).join(" · ");
+    return `<th class="${cls}" data-c="${i}" title="${esc(tip)}"><span class="vlabel">${st ? `<i class="dot st-${st}"></i>` : ""}${esc(label)}</span></th>`;
+  }).join("");
+  h += `</tr></thead><tbody>`;
+  h += rows.map((d) => {
+    const sig = d.signal || {};
+    const cur = d.ndi?.name;
+    const sub = d.is_online
+      ? `${cur ? "◂ " + cur : "sense font"}${sig.locked && sig.label ? " · " + sig.label : ""}`
+      : "no respon";
+    return `<tr class="${d.is_online ? "" : "offline"}" data-r="${esc(d.id)}">
+      <th class="rowhead" title="${esc(d.name)} · ${esc(d.ip)}"><div class="rname"><i class="dot st-${d.status}"></i>${esc(d.name)}</div>
+        <div class="rsub">${esc(sub)}</div></th>` +
+      cols.map((c, i) => `<td class="cell ${cellState(d, c)}" data-c="${i}" title="${esc(d.name)} ◂ ${esc(c.name)}"></td>`).join("") +
+      `</tr>`;
+  }).join("");
+  h += `</tbody>`;
+  table.innerHTML = h;
+  table._cols = cols;
+  if (S.hoverCol != null) highlightCol(S.hoverCol);
+}
+
+function highlightCol(i) {
+  $$("#matrix .hl").forEach((el) => el.classList.remove("hl"));
+  S.hoverCol = i;
+  if (i == null) return;
+  $$(`#matrix [data-c="${i}"]`).forEach((el) => el.classList.add("hl"));
+}
+
+async function routeClick(td) {
+  const table = $("#matrix");
+  const tr = td.closest("tr");
+  const d = S.devices.get(tr.dataset.r);
+  const c = table._cols[Number(td.dataset.c)];
+  if (!d || !c) return;
+  if (!S.unlocked) {
+    table.classList.remove("shake"); void table.offsetWidth; table.classList.add("shake");
+    toast("Matriu bloquejada: prem «Bloquejat · clica per editar» per enrutar");
+    return;
+  }
+  if (!d.is_online) { toast(`'${d.name}' no respon`, true); return; }
+  if (sameSrc(d.ndi?.name, c.name)) { toast(`'${d.name}' ja rep '${c.name}'`); return; }
+  if (S.pending.has(d.id)) return;
+  touchLock();
+  S.pending.set(d.id, c.name);
+  renderMatrix();
+  try {
+    const r = await fetch("/api/routing/route", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ rx: d.id, tx: c.name }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.detail || `HTTP ${r.status}`);
+    if (j.device) S.devices.set(j.device.id, j.device);
+    if (!j.confirmed) toast(`L'equip ha acceptat el canvi però encara reporta una altra font`, true);
+  } catch (e) {
+    S.routeErr = { rx: d.id, tx: c.name, until: Date.now() + 6000 };
+    setTimeout(() => S.page === "routing" && renderMatrix(), 6100);
+    toast(e.message, true);
+  } finally {
+    S.pending.delete(d.id);
+    renderMatrix();
+  }
+}
+
+async function refreshSources(btn) {
+  btn.disabled = true;
+  try {
+    const r = await fetch("/api/routing/refresh", { method: "POST" });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    S.routing = await r.json();
+    renderMatrix();
+  } catch (e) { toast(`No s'han pogut refrescar les fonts: ${e.message}`, true); }
+  finally { btn.disabled = false; }
 }
 
 /* ------------------------------------------------------------------ escaneig */
@@ -471,6 +663,21 @@ function bind() {
     if (el) renderDeviceDrawer(el.dataset.id);
   });
 
+  // Enrutament
+  $$("[data-page]").forEach((b) => (b.onclick = () => setPage(b.dataset.page)));
+  $("#btn-lock").onclick = () => setUnlocked(!S.unlocked);
+  $("#btn-refresh-sources").onclick = (e) => refreshSources(e.currentTarget);
+  $("#r-search").oninput = (e) => { S.r.q = e.target.value.trim(); renderMatrix(); };
+  $("#r-offline").onchange = (e) => { S.r.showOffline = e.target.checked; renderMatrix(); };
+  const matrix = $("#matrix");
+  matrix.addEventListener("click", (e) => { const td = e.target.closest("td.cell"); if (td) routeClick(td); });
+  matrix.addEventListener("mouseover", (e) => {
+    const cell = e.target.closest("[data-c]");
+    const i = cell ? cell.dataset.c : null;
+    if (i !== S.hoverCol) highlightCol(i);
+  });
+  matrix.addEventListener("mouseleave", () => highlightCol(null));
+
   // Avís si deixen d'arribar dades (servidor aturat, PC suspès...)
   setInterval(() => {
     const stale = S.lastEvent && Date.now() - S.lastEvent > Math.max(20000, S.interval * 5000);
@@ -482,5 +689,6 @@ document.addEventListener("DOMContentLoaded", () => {
   loadPrefs();
   syncControls();
   bind();
+  setPage(S.page);
   connect();
 });

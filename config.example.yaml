@@ -27,6 +27,11 @@ discovery:
   connect_timeout: 0.6
   concurrency: 128
 
+# Matriu d'enrutament NDI (pestanya "Enrutament" del dashboard)
+routing:
+  enabled: true          # false = la matriu només es pot consultar
+  refresh_seconds: 15    # cada quant es demana als decoders la llista de fonts NDI
+
 # Credencials de l'API web dels Magewell. Es proven en ordre fins que una funciona.
 # Valor de fàbrica: Admin / Admin
 credentials:

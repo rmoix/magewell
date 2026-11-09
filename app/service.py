@@ -11,6 +11,7 @@ from app.events import Broadcaster
 from app.models import AppConfig, ScanReport
 from app.poller import Poller, TransportFactory, seed_status
 from app.registry import Registry, now_iso
+from app.routing import Router
 from app.state import StateStore
 from app import paths
 
@@ -32,6 +33,7 @@ class Monitor:
         self.poller = Poller(self.registry, transport_factory)
         self.broadcaster = Broadcaster()
         self.scan_report = ScanReport()
+        self.router = Router(self)
         self._poll_now = asyncio.Event()
         self._tasks: List[asyncio.Task] = []
         self._poll_lock = asyncio.Lock()
@@ -46,6 +48,7 @@ class Monitor:
         self._sync_state()
         if background:
             self._tasks.append(asyncio.create_task(self._poll_loop(), name="poll-loop"))
+            self._tasks.append(asyncio.create_task(self._sources_loop(), name="sources-loop"))
             if self.config.discovery.enabled:
                 self._tasks.append(asyncio.create_task(self._discovery_loop(), name="discovery-loop"))
 
@@ -110,6 +113,18 @@ class Monitor:
 
     def request_poll(self) -> None:
         self._poll_now.set()
+
+    async def _sources_loop(self) -> None:
+        """Refresca la llista de fonts NDI (més espaiat que el sondeig: és una crida més pesada per als equips)."""
+        await asyncio.sleep(2)  # deixem que el primer sondeig identifiqui els decoders
+        while True:
+            try:
+                await self.router.refresh()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Error refrescant les fonts NDI")
+            await asyncio.sleep(self.config.routing.refresh_seconds)
 
     # ------------------------------------------------------------------ descobriment
     async def _discovery_loop(self) -> None:
@@ -187,6 +202,7 @@ class Monitor:
             "summary": self.state.summary().model_dump(),
             "alerts": [a.model_dump() for a in self.state.alerts(100)],
             "scan": self.scan_report.model_dump(),
+            "routing": self.router.snapshot(),
             "polling_interval": self.config.polling.interval_seconds,
             "cycle_ms": self.cycle_ms,
         }
