@@ -1,0 +1,72 @@
+# =============================================================================
+#  Magewell Mini-NMS — configuració
+#  La primera vegada que s'executa el programa, aquest fitxer es copia a config.yaml.
+#  Edita config.yaml (no aquest) i prem "Recarregar config" al dashboard.
+# =============================================================================
+
+server:
+  host: 127.0.0.1        # 0.0.0.0 per veure el dashboard des d'altres PCs (Windows demanarà permís de tallafocs)
+  port: 8000
+  open_browser: true     # obre el navegador automàticament en arrencar
+
+polling:
+  interval_seconds: 3    # cada quant es consulta cada equip
+  timeout_seconds: 2.5
+  concurrency_limit: 8   # equips consultats alhora
+  offline_after_failures: 2   # errors seguits abans de marcar OFFLINE (evita falses alarmes)
+
+discovery:
+  enabled: true
+  on_startup: true       # escaneja la xarxa en arrencar
+  rescan_minutes: 10     # 0 = només amb el botó "Escanejar xarxa"
+  subnets: []            # buit = autodetecta les xarxes del PC. Exemples:
+  #  - 192.168.1.0/24
+  #  - 10.0.20.10-10.0.20.80
+  ports: [80]
+  exclude: []            # IPs o rangs a no escanejar
+  connect_timeout: 0.6
+  concurrency: 128
+
+# Credencials de l'API web dels Magewell. Es proven en ordre fins que una funciona.
+# Valor de fàbrica: Admin / Admin
+credentials:
+  - username: Admin
+    password: Admin
+
+# Estat esperat per defecte per a TOTS els equips. Camps a null = no es comprova.
+defaults:
+  expected:
+    signal_locked: true        # alerta si un encoder no té entrada o un decoder no rep NDI
+    width: null                # p. ex. 1920
+    height: null               # p. ex. 1080
+    frame_rate: null           # p. ex. 50 (1080i50 compta com 50)
+    max_temperature_c: 80
+    output_connected: true     # decoders: alerta si no hi ha pantalla connectada a la sortida
+
+# Equips concrets (opcional). Serveix per:
+#  - afegir equips que l'escaneig no troba (altra VLAN, etc.)
+#  - posar-los nom i ubicació
+#  - definir-ne l'estat esperat
+#  - ignorar-ne algun (ignore: true)
+# Es poden identificar per IP o per número de sèrie (serial).
+devices: []
+#  - ip: 192.168.1.101
+#    name: "Càmera 1 escenari"
+#    location: "Escenari"
+#    expected:
+#      width: 1920
+#      height: 1080
+#      frame_rate: 50
+#      ndi_name: "SALA-CAM1"
+#
+#  - serial: "B401180706020"
+#    name: "Projector principal"
+#    location: "Sala"
+#    expected:
+#      ndi_source: "SALA-PGM"
+#
+#  - ip: 192.168.1.150
+#    credentials: { username: Admin, password: "altra" }
+#
+#  - ip: 192.168.1.99
+#    ignore: true

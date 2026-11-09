@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+.venv-build/
+build/
+dist/
+
+# Fitxers de l'usuari / execució
+config.yaml
+data/
+
+# IDE
+.idea/

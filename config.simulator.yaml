@@ -1,0 +1,39 @@
+# Configuració per provar amb el simulador (python -m simulator).
+server:
+  port: 8000
+  open_browser: true
+
+polling:
+  interval_seconds: 2
+
+discovery:
+  subnets: ["127.0.0.1"]
+  ports: [9001, 9002, 9003, 9004, 9005, 9006, 9007, 9008, 9009, 9010]
+  rescan_minutes: 0
+
+credentials:
+  - username: Admin
+    password: Admin
+
+defaults:
+  expected:
+    signal_locked: true
+    frame_rate: 50
+    max_temperature_c: 80
+    output_connected: true
+
+devices:
+  - ip: 127.0.0.1
+    port: 9001
+    name: "Càmera 1 · Escenari"
+    location: "Escenari"
+    expected: { width: 1920, height: 1080, ndi_name: "SALA-CAM1" }
+  - ip: 127.0.0.1
+    port: 9004
+    name: "PC ponent (atril)"
+    location: "Escenari"
+    expected: { frame_rate: 59.94 }
+  - serial: "B401220101006"
+    name: "Projector principal"
+    location: "Sala"
+    expected: { ndi_source: "REGIA (PGM)" }

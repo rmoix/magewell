@@ -1,0 +1,63 @@
+name: Build Windows
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write  # per adjuntar el .zip a les releases quan es crea un tag v*
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q
+
+  build:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: pyinstaller packaging/MagewellNMS.spec --noconfirm --clean
+      - name: Smoke test de l'executable
+        shell: pwsh
+        run: |
+          .\dist\MagewellNMS\MagewellNMS.exe --version
+          $p = Start-Process -FilePath .\dist\MagewellNMS\MagewellNMS.exe -ArgumentList "serve","--no-browser","--port","8123" -PassThru
+          $ok = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep -Seconds 1
+            try { $r = Invoke-WebRequest -UseBasicParsing http://127.0.0.1:8123/healthz; if ($r.StatusCode -eq 200) { $ok = $true; break } } catch {}
+          }
+          Stop-Process -Id $p.Id -Force
+          if (-not $ok) { Get-Content .\dist\MagewellNMS\data\nms.log -ErrorAction SilentlyContinue; exit 1 }
+          Remove-Item -Recurse -Force .\dist\MagewellNMS\data, .\dist\MagewellNMS\config.yaml -ErrorAction SilentlyContinue
+      - name: Empaquetar
+        shell: pwsh
+        run: |
+          Copy-Item README.md dist\MagewellNMS\LLEGEIX-ME.md
+          Compress-Archive -Path dist\MagewellNMS -DestinationPath dist\MagewellNMS-windows.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MagewellNMS-windows
+          path: dist/MagewellNMS-windows.zip
+      - name: Publicar release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/MagewellNMS-windows.zip

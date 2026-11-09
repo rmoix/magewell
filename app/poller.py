@@ -1,257 +1,159 @@
-"""Concurrent async polling engine for Magewell devices."""
+"""Sondeig d'un equip: crida l'API, parseja i construeix el DeviceStatus."""
 
 import asyncio
-import datetime
 import logging
-from typing import Callable, List, Optional
+from typing import Callable, Dict, Optional, Tuple
+
 import httpx
 
-from app.config import get_config
-from app.magewell_client import MagewellClient, parse_signal_data
-from app.models import (
-    AppConfig,
-    DeviceConfig,
-    DeviceLiveStatus,
-    HealthStatus,
-    SignalInfo,
-)
+from app.health import evaluate, merge_expected
+from app.magewell.api import AuthFailed, DeviceUnreachable, MagewellSession, NotMagewell, status_name
+from app.magewell.parse import parse_all
+from app.models import AppConfig, DeviceStatus, HealthStatus, NdiInfo, Role, SignalInfo
+from app.registry import Registry, Target, now_iso
 
 logger = logging.getLogger(__name__)
 
+TransportFactory = Callable[[str, int], Optional[httpx.AsyncBaseTransport]]
 
-class DevicePoller:
-    """Orchestrates concurrent polling of Magewell devices across the network."""
 
-    def __init__(
-        self,
-        config: Optional[AppConfig] = None,
-        on_device_updated: Optional[Callable[[DeviceLiveStatus], None]] = None,
-        on_cycle_completed: Optional[Callable[[List[DeviceLiveStatus]], None]] = None,
-    ):
-        self.config = config or get_config()
-        self.on_device_updated = on_device_updated
-        self.on_cycle_completed = on_cycle_completed
-        self._running = False
-        self._task: Optional[asyncio.Task] = None
-        self._client: Optional[httpx.AsyncClient] = None
-        self._semaphore: Optional[asyncio.Semaphore] = None
-        self._magewell_client = MagewellClient(
-            timeout=self.config.polling.timeout_seconds
-        )
+def display_name(t: Target, role: Role, ndi_name: Optional[str], model: Optional[str]) -> str:
+    if t.name:
+        return t.name
+    if role == Role.ENCODER and ndi_name:
+        return ndi_name
+    if t.last_name:
+        return t.last_name
+    kind = {Role.ENCODER: "Encoder", Role.DECODER: "Decoder"}.get(role, "Magewell")
+    return f"{kind} {t.id}"
 
-    def update_config(self, new_config: AppConfig) -> None:
-        """Update polling configuration and reload limits."""
-        self.config = new_config
-        self._magewell_client = MagewellClient(
-            timeout=new_config.polling.timeout_seconds
-        )
-        if self._semaphore is not None:
-            self._semaphore = asyncio.Semaphore(new_config.polling.concurrency_limit)
-        logger.info(
-            f"Poller config updated: interval={new_config.polling.interval_seconds}s, "
-            f"concurrency={new_config.polling.concurrency_limit}"
-        )
 
-    async def _get_client(self) -> httpx.AsyncClient:
-        """Get or initialize persistent HTTP async client with connection pooling."""
-        if self._client is None or self._client.is_closed:
-            limits = httpx.Limits(
-                max_keepalive_connections=25,
-                max_connections=50,
-                keepalive_expiry=15.0,
-            )
-            self._client = httpx.AsyncClient(
-                limits=limits,
-                timeout=self.config.polling.timeout_seconds,
-                verify=False,
-            )
-        return self._client
+def seed_status(t: Target, config: AppConfig) -> DeviceStatus:
+    return DeviceStatus(
+        id=t.id, ip=t.ip, port=t.port, source=t.source,
+        name=t.name or t.last_name or f"Magewell {t.id}",
+        location=t.location, model=t.last_model, serial=t.serial,
+        expected=merge_expected(config.defaults.expected, t.expected),
+        status=HealthStatus.UNKNOWN, issues=["Pendent del primer sondeig"],
+    )
 
-    async def poll_device(self, device: DeviceConfig) -> DeviceLiveStatus:
-        """Poll a single device with concurrency bounding and error isolation."""
-        semaphore = self._semaphore or asyncio.Semaphore(
-            self.config.polling.concurrency_limit
-        )
 
-        async with semaphore:
-            client = await self._get_client()
-            is_online, response_time_ms, telemetry, error_msg = (
-                await self._magewell_client.query_device(device, client=client)
-            )
+class Poller:
+    def __init__(self, registry: Registry, transport_factory: Optional[TransportFactory] = None):
+        self.registry = registry
+        self.transport_factory = transport_factory
+        self._sessions: Dict[str, MagewellSession] = {}
 
-        now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    def _session(self, t: Target, timeout: float) -> MagewellSession:
+        s = self._sessions.get(t.id)
+        creds = self.registry.credentials_for(t)
+        if s is None or s.credentials != creds or s.timeout != timeout:
+            if s is not None:
+                self._drop(t.id)
+            transport = self.transport_factory(t.ip, t.port) if self.transport_factory else None
+            s = MagewellSession(t.ip, t.port, creds, timeout=timeout, transport=transport)
+            self._sessions[t.id] = s
+        return s
 
-        if not is_online:
-            status = DeviceLiveStatus(
-                id=device.id,
-                name=device.name,
-                ip=device.ip,
-                port=device.port,
-                model=device.model,
-                role=device.role,
-                location=device.location,
-                status=HealthStatus.OFFLINE,
-                is_online=False,
-                response_time_ms=response_time_ms,
-                signal=SignalInfo(locked=False),
-                expected=device.expected,
-                drifts=["Dispositiu desconnectat o no respon (OFFLINE)"],
-                last_seen=None,
-                last_checked=now_iso,
-                error_message=error_msg or "Host unreachable",
-            )
-        else:
-            signal_data = telemetry.get("signal", {})
-            device_data = telemetry.get("device", {})
-            summary_data = telemetry.get("summary", {})
-
-            signal_info = parse_signal_data(signal_data)
-
-            # Extract hardware metrics
-            temp = (
-                device_data.get("board-temperature")
-                or device_data.get("temperature")
-                or device_data.get("temp")
-            )
-            cpu = device_data.get("cpu-usage") or device_data.get("cpu")
-            mem = device_data.get("memory-usage") or device_data.get("memory")
-            fw = (
-                device_data.get("firmware-version")
-                or device_data.get("firmware")
-                or device_data.get("version")
-            )
-            serial = device_data.get("serial-no") or device_data.get("serial")
-            ndi_name = (
-                summary_data.get("ndi-name")
-                or summary_data.get("name")
-                or summary_data.get("ndi_name")
-            )
-            streaming = summary_data.get("streaming") or summary_data.get("is-streaming")
-
-            status = DeviceLiveStatus(
-                id=device.id,
-                name=device.name,
-                ip=device.ip,
-                port=device.port,
-                model=device.model,
-                role=device.role,
-                location=device.location,
-                status=HealthStatus.OK,  # Will be refined by drift engine
-                is_online=True,
-                response_time_ms=response_time_ms,
-                temperature_c=float(temp) if temp is not None else None,
-                cpu_usage=float(cpu) if cpu is not None else None,
-                memory_usage=float(mem) if mem is not None else None,
-                firmware_version=str(fw) if fw is not None else None,
-                serial_no=str(serial) if serial is not None else None,
-                ndi_name=str(ndi_name) if ndi_name is not None else None,
-                streaming_active=bool(streaming) if streaming is not None else None,
-                signal=signal_info,
-                expected=device.expected,
-                drifts=[],
-                last_seen=now_iso,
-                last_checked=now_iso,
-                error_message=error_msg,
-            )
-
-        if self.on_device_updated:
+    def _drop(self, tid: str) -> None:
+        s = self._sessions.pop(tid, None)
+        if s is not None:
             try:
-                self.on_device_updated(status)
-            except Exception as e:
-                logger.error(f"Error in on_device_updated callback: {e}")
-
-        return status
-
-    async def poll_all_devices(self) -> List[DeviceLiveStatus]:
-        """Poll all configured devices concurrently."""
-        if self._semaphore is None:
-            self._semaphore = asyncio.Semaphore(self.config.polling.concurrency_limit)
-
-        devices = self.config.devices
-        if not devices:
-            return []
-
-        tasks = [self.poll_device(dev) for dev in devices]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        final_statuses: List[DeviceLiveStatus] = []
-        for i, res in enumerate(results):
-            if isinstance(res, DeviceLiveStatus):
-                final_statuses.append(res)
-            else:
-                dev = devices[i]
-                logger.error(f"Unhandled exception polling device {dev.id} ({dev.ip}): {res}")
-                now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
-                final_statuses.append(
-                    DeviceLiveStatus(
-                        id=dev.id,
-                        name=dev.name,
-                        ip=dev.ip,
-                        port=dev.port,
-                        model=dev.model,
-                        role=dev.role,
-                        location=dev.location,
-                        status=HealthStatus.OFFLINE,
-                        is_online=False,
-                        signal=SignalInfo(locked=False),
-                        expected=dev.expected,
-                        drifts=[f"Internal poll error: {res}"],
-                        last_seen=None,
-                        last_checked=now_iso,
-                        error_message=str(res),
-                    )
-                )
-
-        if self.on_cycle_completed:
-            try:
-                self.on_cycle_completed(final_statuses)
-            except Exception as e:
-                logger.error(f"Error in on_cycle_completed callback: {e}")
-
-        return final_statuses
-
-    async def _run_loop(self) -> None:
-        """Main continuous polling loop."""
-        logger.info(
-            f"Starting polling loop for {len(self.config.devices)} devices "
-            f"every {self.config.polling.interval_seconds}s"
-        )
-        while self._running:
-            start_time = asyncio.get_running_loop().time()
-            try:
-                await self.poll_all_devices()
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Unexpected error in polling cycle: {e}")
-
-            elapsed = asyncio.get_running_loop().time() - start_time
-            sleep_time = max(0.1, self.config.polling.interval_seconds - elapsed)
-            try:
-                await asyncio.sleep(sleep_time)
-            except asyncio.CancelledError:
-                break
-
-        logger.info("Polling loop stopped.")
-
-    def start(self) -> None:
-        """Start polling loop in background."""
-        if not self._running:
-            self._running = True
-            self._semaphore = asyncio.Semaphore(self.config.polling.concurrency_limit)
-            self._task = asyncio.create_task(self._run_loop())
-
-    async def stop(self) -> None:
-        """Gracefully stop polling loop and close HTTP connections."""
-        self._running = False
-        if self._task and not self._task.done():
-            self._task.cancel()
-            try:
-                await self._task
-            except asyncio.CancelledError:
+                asyncio.get_running_loop().create_task(s.close())
+            except RuntimeError:
                 pass
-            self._task = None
 
-        if self._client and not self._client.is_closed:
-            await self._client.aclose()
-            self._client = None
+    def forget(self, tid: str) -> None:
+        self._drop(tid)
+
+    async def close(self) -> None:
+        for s in list(self._sessions.values()):
+            await s.close()
+        self._sessions.clear()
+
+    async def poll(self, t: Target, prev: Optional[DeviceStatus], config: AppConfig) -> Tuple[DeviceStatus, Optional[dict]]:
+        expected = merge_expected(config.defaults.expected, t.expected)
+        base = prev.model_copy(deep=True) if prev else seed_status(t, config)
+        base.expected = expected
+        base.location = t.location
+        base.source = t.source
+        base.last_checked = now_iso()
+        session = self._session(t, config.polling.timeout_seconds)
+        raw: Dict[str, dict] = {}
+
+        try:
+            summary = await session.call("get-summary-info")
+            raw["get-summary-info"] = summary
+            if summary.get("status") != 0:
+                raise NotMagewell(f"get-summary-info ha retornat {status_name(summary.get('status'))}")
+            role_hint = parse_all(summary)["role"]
+            signal = channel = None
+            if role_hint == Role.DECODER:
+                channel = await session.call("get-channel")
+                raw["get-channel"] = channel
+            else:
+                signal = await session.call("get-signal-info")
+                raw["get-signal-info"] = signal
+            parsed = parse_all(summary, signal, channel)
+        except DeviceUnreachable as e:
+            return self._failure(base, t, config, f"No respon: {e}"), None
+        except AuthFailed as e:
+            st = self._online(base, session)
+            st.status = HealthStatus.AUTH_ERROR
+            st.error_message = str(e)
+            st.status, st.issues = evaluate(st)
+            return st, raw or None
+        except NotMagewell as e:
+            st = self._online(base, session)
+            st.status = HealthStatus.UNKNOWN
+            st.error_message = str(e)
+            st.issues = [str(e)]
+            return st, raw or None
+        except Exception as e:  # mai ha de tombar el bucle
+            logger.exception("Error inesperat sondejant %s", t.id)
+            return self._failure(base, t, config, f"Error intern: {e}"), None
+
+        st = self._online(base, session)
+        st.role = parsed["role"]
+        st.model = parsed["model"] or st.model
+        st.serial = parsed["serial"] or st.serial
+        for k in ("firmware", "hw_revision", "temperature_c", "cpu_usage", "memory_usage",
+                  "uptime_s", "fan_rpm", "output_state", "mac", "link_speed"):
+            setattr(st, k, parsed[k])
+        st.signal = parsed["signal"]
+        st.ndi = parsed["ndi"]
+        st.error_message = None
+        st.name = display_name(t, st.role, st.ndi.name, st.model)
+        # Si el número de sèrie ja era a l'inventari amb una altra IP, el registre elimina l'entrada antiga.
+        remembered = st.ndi.name if st.role == Role.ENCODER else None  # només noms reals, no els generats
+        for rid in self.registry.update_identity(t.id, st.serial, remembered, st.model):
+            self._drop(rid)
+        # Pot ser que ara coincideixi una sobreescriptura per número de sèrie.
+        if t.name:
+            st.name = t.name
+        st.location = t.location
+        st.expected = merge_expected(config.defaults.expected, t.expected)
+        st.status = HealthStatus.UNKNOWN
+        st.status, st.issues = evaluate(st)
+        return st, raw
+
+    @staticmethod
+    def _online(base: DeviceStatus, session: MagewellSession) -> DeviceStatus:
+        base.is_online = True
+        base.consecutive_failures = 0
+        base.response_time_ms = session.last_rtt_ms
+        base.last_seen = base.last_checked
+        return base
+
+    @staticmethod
+    def _failure(base: DeviceStatus, t: Target, config: AppConfig, msg: str) -> DeviceStatus:
+        base.consecutive_failures += 1
+        base.error_message = msg
+        if base.consecutive_failures >= config.polling.offline_after_failures or base.status == HealthStatus.UNKNOWN:
+            base.is_online = False
+            base.response_time_ms = None
+            base.signal = SignalInfo()
+            base.ndi = NdiInfo(name=base.ndi.name)
+            base.status, base.issues = evaluate(base)
+        # Si encara no s'ha arribat al llindar es manté l'estat anterior (evita falses alarmes per un timeout puntual).
+        return base
